@@ -23,39 +23,33 @@ integrationWindow = 365
 	
 	
 #-------------------------- Main code body -------------------------------
-	#start code
-	names <- read.table(file = paste(fileLocation, fileBase, ".names", sep=""), head=FALSE, sep=",")
-	nsamples <- read.table(file = paste(fileLocation, fileBase, ".nsamples", sep=""), head=FALSE, sep=",")
-	nOverWMax <- read.table(file = paste(fileLocation, fileBase, ".nWMaxCut", sep=""), head=FALSE, sep=",")
+names <- read.table(file = paste(fileLocation, fileBase, ".names", sep=""), head=FALSE, sep=",")
+nsamples <- read.table(file = paste(fileLocation, fileBase, ".nsamples", sep=""), head=FALSE, sep=",")
+nOverWMax <- read.table(file = paste(fileLocation, fileBase, ".nWMaxCut", sep=""), head=FALSE, sep=",")
 
-	loopLimit <- dim(names)[1]
+loopLimit <- dim(names)[1]
+		
+#create different OD cutof scenarios and store in list
+Sdata <- list(); surv <- list(); avg <- list(); mean <- list(); var <- list(); CI <- list(); SD <- list();CoeffVar <- list(); BEDH <-list()
 	
-	#create different OD cutof scenarios and store in list
-	Sdata <- list(); surv <- list(); avg <- list(); mean <- list(); var <- list(); CI <- list(); SD <- list();CoeffVar <- list(); BEDH <-list()
-	
-	colours = c("red","blue","green","yellow","black","purple", "cyan","magenta", "orange", "pink", "brown", "violet")
-	limitArray = array()
-	meanOut = array()
+colours = c("red","blue","green","yellow","black","purple", "cyan","magenta", "orange", "pink", "brown", "violet")
+limitArray = array()
+meanOut = array()
 
-	for (j in c(1:loopLimit)) 
-	{
-		BEDH[[j]] <- read.csv(file= paste(fileLocation, fileBase, ".", names$V1[j], ".csv", sep=""), head=TRUE, sep=" ")
-
-	 	Sdata[[j]] <- makeSurvival(BEDH[[j]], names$V1[j], 0, integrationWindow)
-#	 	for (k in c(1:dim(Sdata[[1]])[1])) 
-#		{
-#	 		if(Sdata[[j]][k,2] > 365) Sdata[[j]][k,2] <- 365
-#	 	}
-	 	surv[[j]] <- turnbull(Sdata[[j]],200)$Tabel[,1:2]
-	 	avg[[j]] <- makeAvg(surv[[j]], max(BEDH[[j]]$ID))
-	 	mean[[j]] <- sum(avg[[j]]$mean[!is.na(avg[[j]]$mean)])
-	 	var[[j]] <- sum(avg[[j]]$Var[!is.na(avg[[j]]$Var) & avg[[j]]$Var < Inf])
-		SD[[j]] <- sqrt(var[[j]])
-		CoeffVar[[j]] <- SD[[j]]/mean[[j]]
-	 	CI[[j]] <- c(mean[[j]] - 1.96 * sqrt(var[[j]]), mean[[j]] + 1.96 * sqrt(var[[j]])) 
-	 	if (j == 1) 
-	 	{
-	 		plot
+for (j in c(1:loopLimit)) 
+{
+	BEDH[[j]] <- read.csv(file= paste(fileLocation, fileBase, ".", names$V1[j], ".csv", sep=""), head=TRUE, sep=" ") # read BED times
+ 	Sdata[[j]] <- makeSurvival(BEDH[[j]], names$V1[j], 0, integrationWindow) # create survival data
+	surv[[j]] <- turnbull(Sdata[[j]],200)$Tabel[,1:2] # generate survival analysis
+	avg[[j]] <- makeAvg(surv[[j]], max(BEDH[[j]]$ID)) # get average survival times
+	mean[[j]] <- sum(avg[[j]]$mean[!is.na(avg[[j]]$mean)])
+	var[[j]] <- sum(avg[[j]]$Var[!is.na(avg[[j]]$Var) & avg[[j]]$Var < Inf])
+	SD[[j]] <- sqrt(var[[j]]) # generate standard deviation
+	CoeffVar[[j]] <- SD[[j]]/mean[[j]]
+	CI[[j]] <- c(mean[[j]] - 1.96 * sqrt(var[[j]]), mean[[j]] + 1.96 * sqrt(var[[j]])) #generate confidence intervals
+ 	if (j == 1) 
+	 {
+	 	plot
 	 		(
 	 			surv[[j]][,1],
 	 			surv[[j]][,2],
@@ -66,13 +60,13 @@ integrationWindow = 365
 	 			type="S",
 	 			col="red"
 	 		)
-		else
-		{
-			lines(surv[[j]][,1],surv[[j]][,2],col=colours[j],type="S")
-		}
-		limitArray[j] = paste("OD.",names$V1[j], sep="")
-		meanOut[j] <- paste
-			(
+	else
+	{
+		lines(surv[[j]][,1],surv[[j]][,2],col=colours[j],type="S")
+	}
+	limitArray[j] = paste("OD.",names$V1[j], sep="")
+	meanOut[j] <- paste
+		(
 				names$V1[j], 
 				mean[[j]], 
 				(mean[[j]] - CI[[j]][1]), (CI[[j]][2] - mean[[j]]), 
@@ -81,8 +75,8 @@ integrationWindow = 365
 				nsamples[j], 
 				nOverWMax$V1[j], 
 				sep=" "
-			)
-	}
+		)
+}
 	
 legend(x=300,y=0.8,legend=limitArray,col=colours,lty=1)
 	
@@ -96,17 +90,25 @@ write.table(meanOut, file = paste(fileLocation, fileBase,".mean.csv", sep=""), s
 	
 	
 #----------------- Function declarations -----------------
-# Ma
+
+# <- Function makeSurvival ->
+# Description: 
+# This function creates survival times on BED data given an OD cut off, integrationwindow
+#
+# Usage:
+# 	cut = Optical density cutoff
+# 	integrationWindow = integration window to use, in days
+# 	dataNNu.Time.OD = data input matrix (person Id, Time of test in days) 
+# 	ExcludeSetting: 
+#		1 = remove already seroconverted at t0, 
+# 		2 = remove slow progressors
+#		3 = remove normal progressors
+#		4 = remove already seroconverted and slow progressors
+#
+
 makeSurvival <- function(dataNNu.Time.OD, cut, ExcludeSetting, integrationWindow) 
 {
-		# settings                               
-		# cut = OD cut off
-		# dataNNu.Time.OD = data input matrix (person Id, Time of test in days) 
-		# setting: 										1 = remove already seroconverted at t0, 
-		# 												2 = remove slow progressors
-		#												3 = remove normal progressors
-		#												4 = remove already seroconverted and slow progressors
-		
+
 		BEDH <- dataNNu.Time.OD
 		d<-as.data.frame(BEDH)
 		n <- dim(BEDH)[1] - 1
@@ -190,8 +192,19 @@ makeSurvival <- function(dataNNu.Time.OD, cut, ExcludeSetting, integrationWindow
 		colnames(d3)[1] <- "L"
 		colnames(d3)[2] <- "U"
 		return(d3)
-} # end Survival function
-	
+}
+# <- End Function makeSurvival ->
+
+
+
+# <- Function turnbull ->
+# Description: 
+# This function performs a turnbull survival analysis on BED data derived from the makeSurvival function
+#
+# Usage:
+# 	data = data from makeSurvival function: 
+#	iter = number of iterations to perform
+#
 turnbull <- function (data,iter) 
 {
 		dfram <- data[,1:2]
@@ -238,8 +251,18 @@ turnbull <- function (data,iter)
 		Tabel <- cbind(Times=Times, Surv=round(Sold,4),dvec=Dmat[,iter],yvec=Ymat[,iter])
 		list(Tabel=Tabel)
 }
-	
-#survival mean function
+
+# <- End Function turnbull ->
+
+
+# <- Function makeAvg ->
+# Description: 
+# This function performs gets mean survival time from a Turnbull analysis
+#
+# Usage:
+# 	survivalData = output from turnbull function
+#	numPeople = number of people in sample
+#	
 makeAvg <- function(survivalData, numPeople) 
 { 
 		d<-as.data.frame(survivalData)
@@ -279,6 +302,8 @@ makeAvg <- function(survivalData, numPeople)
 		 }
 	
 		 return(as.data.frame(avg))
-	}
-	#-------- end function delcarations -----------
+}
+# <- End function makeAvg->
+
+#-------- end function delcarations -----------
 	
